@@ -262,7 +262,7 @@ esp_err_t status_led_init(void)
         return err;
     }
 
-    if (xTaskCreate(status_led_task, "status_led_task", 1024, NULL, 10, NULL) != pdTRUE) {
+    if (xTaskCreate(status_led_task, "status_led_task", 2048, NULL, 10, NULL) != pdTRUE) {
         return ESP_ERR_NO_MEM;
     }
 
