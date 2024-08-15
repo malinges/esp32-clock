@@ -36,8 +36,6 @@
 
 #define STATUS_LED_CHECK(a, str, ret_val)       ESP_RETURN_ON_FALSE(a, ret_val, STATUS_LED_TAG, "%s", str)
 #define STATUS_LED_ARG_CHECK(a, param)          ESP_RETURN_ON_FALSE(a, ESP_ERR_INVALID_ARG, STATUS_LED_TAG, param " argument is invalid")
-#define STATUS_LED_CHECK_ISR(a, str, ret_val)   ESP_RETURN_ON_FALSE_ISR(a, ret_val, STATUS_LED_TAG, "%s", str)
-#define STATUS_LED_ARG_CHECK_ISR(a, param)      ESP_RETURN_ON_FALSE_ISR(a, ESP_ERR_INVALID_ARG, STATUS_LED_TAG, param " argument is invalid")
 
 #define STATUS_LED_IS_FLAG_SET(flags, flag)     (((flags) & (1U << flag)) != 0)
 
@@ -162,30 +160,17 @@ static esp_err_t status_led_update(void)
     return ESP_OK;
 }
 
-static esp_err_t IRAM_ATTR status_led_set_flag(status_led_flag_t flag, bool set)
+static esp_err_t status_led_set_flag(status_led_flag_t flag, bool set)
 {
+    STATUS_LED_CHECK(status_led_queue != NULL, STATUS_LED_NOT_INIT, ESP_ERR_INVALID_STATE);
+    STATUS_LED_ARG_CHECK(flag < STATUS_LED_FLAG_MAX, "flag");
+
     status_led_msg_t msg = {
         .flag = flag,
         .set = set,
     };
-    
-    BaseType_t ret;
 
-    if (xPortInIsrContext()) {
-        STATUS_LED_CHECK_ISR(status_led_queue != NULL, STATUS_LED_NOT_INIT, ESP_ERR_INVALID_STATE);
-        STATUS_LED_ARG_CHECK_ISR(flag < STATUS_LED_FLAG_MAX, "flag");
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        ret = xQueueSendFromISR(status_led_queue, &msg, &xHigherPriorityTaskWoken);
-        if (xHigherPriorityTaskWoken == pdTRUE) {
-            portYIELD_FROM_ISR();
-        }
-    } else {
-        STATUS_LED_CHECK(status_led_queue != NULL, STATUS_LED_NOT_INIT, ESP_ERR_INVALID_STATE);
-        STATUS_LED_ARG_CHECK(flag < STATUS_LED_FLAG_MAX, "flag");
-        ret = xQueueSend(status_led_queue, &msg, portMAX_DELAY);
-    }
-
-    if (ret != pdTRUE) {
+    if (xQueueSend(status_led_queue, &msg, portMAX_DELAY) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
 
