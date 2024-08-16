@@ -1,0 +1,26 @@
+START:
+CLK 0 1 1
+DIO 1 1 0 0
+
+BIT:
+CLK 0 0 1 1
+DIO   b b b b
+
+ACK1:
+CLK 1 0 0
+DIO   0 0 0
+
+ACK2:
+CLK 1 1 0 0
+DIO   0 0 0
+
+STOP:
+CLK 1 1 0
+DIO 0 1 1
+
+ALL:
+CLK 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 1 0 0 1 1 0 0 1 1 0
+DIO 1 1 0 0 a a a a b b b b c c c c d d d d e e e e f f f f g g g g h h h h 0 0 0 0 0 0 0 1 1
+
+auto-increment: C1 + C2 + D0..D5 + C3 => 4-9 bytes
+fixed address: C1 + (C2 + Dn)+ + C3   => 4-? bytes

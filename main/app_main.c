@@ -16,13 +16,14 @@
 #include "wifi_prov.h"
 #include "sntp.h"
 #include "tz.h"
+#include "tm1637.h"
 
 static const char *TAG = "app";
 
 typedef enum {
-    APP_EVENT_GROUP_WIFI_CONNECTED_BIT = BIT0,
-    APP_EVENT_GROUP_SNTP_SYNCED_BIT = BIT1,
-    APP_EVENT_GROUP_TIMEZONE_SET_BIT = BIT2,
+    APP_EVENT_GROUP_WIFI_CONNECTED_BIT  = BIT0,
+    APP_EVENT_GROUP_SNTP_SYNCED_BIT     = BIT1,
+    APP_EVENT_GROUP_TIMEZONE_SET_BIT    = BIT2,
 } app_event_group_bit_t;
 
 static EventGroupHandle_t app_event_group;
@@ -58,6 +59,8 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 
 void app_main(void)
 {
+    rmt_test();
+
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
