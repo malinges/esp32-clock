@@ -1,9 +1,13 @@
-#include <esp_check.h>
+#include <stdint.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+
+#include <esp_check.h>
 #include <esp_log.h>
+
+#include <driver/rmt_encoder.h>
 #include <driver/rmt_tx.h>
 
 #include "tm1637.h"
@@ -22,17 +26,13 @@
 #define TM1637_MIN_FREQUENCY(res)           ((res) / (RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER) * TM1637_TICKS_PER_PERIOD)
 #define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_TICKS_PER_PERIOD)
 
-static const char *TAG = "tm1637";
+#define TM1637_RMT_SYMBOLS_PER_BYTE         (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
-typedef struct {
-    uint32_t resolution; /*!< Encoder resolution, in Hz */
-} tm1637_encoder_config_t;
+static const char *TAG = "tm1637";
 
 /*
  * CLK encoder
  */
-
-#define TM1637_CLK_SYMBOLS_NUM              (12)        // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
 #define TM1637_CLK_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
@@ -69,85 +69,35 @@ typedef struct {
     .duration1 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
 })
 
-typedef struct {
-    rmt_encoder_t base;
-    rmt_encoder_t *copy_encoder;
-    rmt_symbol_word_t tm1637_clk_symbols[TM1637_CLK_SYMBOLS_NUM];
-} rmt_tm1637_clk_encoder_t;
-
-static IRAM_ATTR size_t rmt_encode_tm1637_clk(rmt_encoder_t *encoder, rmt_channel_handle_t channel, const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state)
+static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t data_size,
+                               size_t symbols_written, size_t symbols_free,
+                               rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    rmt_tm1637_clk_encoder_t *tm1637_clk_encoder = __containerof(encoder, rmt_tm1637_clk_encoder_t, base);
-    rmt_encode_state_t session_state = RMT_ENCODING_RESET;
-    rmt_encode_state_t state = RMT_ENCODING_RESET;
-    size_t encoded_symbols = 0;
-    rmt_encoder_handle_t copy_encoder = tm1637_clk_encoder->copy_encoder;
-    encoded_symbols += copy_encoder->encode(copy_encoder, channel, &tm1637_clk_encoder->tm1637_clk_symbols,
-                                            sizeof(tm1637_clk_encoder->tm1637_clk_symbols), &session_state);
-    if (session_state & RMT_ENCODING_COMPLETE) {
-        state |= RMT_ENCODING_COMPLETE;
-    }
-    if (session_state & RMT_ENCODING_MEM_FULL) {
-        state |= RMT_ENCODING_MEM_FULL;
-    }
-    *ret_state = state;
-    return encoded_symbols;
-}
+    size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
+    size_t symbol_pos = 0;
 
-static esp_err_t rmt_del_tm1637_clk_encoder(rmt_encoder_t *encoder)
-{
-    rmt_tm1637_clk_encoder_t *tm1637_clk_encoder = __containerof(encoder, rmt_tm1637_clk_encoder_t, base);
-    rmt_del_encoder(tm1637_clk_encoder->copy_encoder);
-    free(tm1637_clk_encoder);
-    return ESP_OK;
-}
-
-static esp_err_t rmt_tm1637_clk_encoder_reset(rmt_encoder_t *encoder)
-{
-    rmt_tm1637_clk_encoder_t *tm1637_clk_encoder = __containerof(encoder, rmt_tm1637_clk_encoder_t, base);
-    rmt_encoder_reset(tm1637_clk_encoder->copy_encoder);
-    return ESP_OK;
-}
-
-static esp_err_t rmt_new_tm1637_clk_encoder(const tm1637_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder)
-{
-    esp_err_t ret = ESP_OK;
-    rmt_tm1637_clk_encoder_t *tm1637_clk_encoder = NULL;
-    ESP_GOTO_ON_FALSE(config && ret_encoder, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
-    tm1637_clk_encoder = rmt_alloc_encoder_mem(sizeof(rmt_tm1637_clk_encoder_t));
-    ESP_GOTO_ON_FALSE(tm1637_clk_encoder, ESP_ERR_NO_MEM, err, TAG, "no mem for tm1637 clk encoder");
-    tm1637_clk_encoder->base.encode = rmt_encode_tm1637_clk;
-    tm1637_clk_encoder->base.del = rmt_del_tm1637_clk_encoder;
-    tm1637_clk_encoder->base.reset = rmt_tm1637_clk_encoder_reset;
-
-    rmt_copy_encoder_config_t copy_encoder_config = {};
-    ESP_GOTO_ON_ERROR(rmt_new_copy_encoder(&copy_encoder_config, &tm1637_clk_encoder->copy_encoder), err, TAG, "create copy encoder failed");
-
-    tm1637_clk_encoder->tm1637_clk_symbols[0] = TM1637_CLK_START_SYMBOL(config->resolution);
-    for (int i = 1; i < 9; i++) {
-        tm1637_clk_encoder->tm1637_clk_symbols[i] = TM1637_CLK_BIT_SYMBOL(config->resolution);
-    }
-    tm1637_clk_encoder->tm1637_clk_symbols[9] = TM1637_CLK_ACK1_SYMBOL(config->resolution);
-    tm1637_clk_encoder->tm1637_clk_symbols[10] = TM1637_CLK_ACK2_SYMBOL(config->resolution);
-    tm1637_clk_encoder->tm1637_clk_symbols[11] = TM1637_CLK_STOP_SYMBOL(config->resolution);
-
-    *ret_encoder = &tm1637_clk_encoder->base;
-    return ESP_OK;
-err:
-    if (tm1637_clk_encoder) {
-        if (tm1637_clk_encoder->copy_encoder) {
-            rmt_del_encoder(tm1637_clk_encoder->copy_encoder);
+    while (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+        symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RESOLUTION_HZ);
+        for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
+            symbols[symbol_pos++] = TM1637_CLK_BIT_SYMBOL(TM1637_RESOLUTION_HZ);
         }
-        free(tm1637_clk_encoder);
+        symbols[symbol_pos++] = TM1637_CLK_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_CLK_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+        data_pos++;
+        symbols_free -= TM1637_RMT_SYMBOLS_PER_BYTE;
     }
-    return ret;
+
+    if (data_pos >= data_size) {
+        *done = 1;
+    }
+
+    return symbol_pos;
 }
 
 /*
  * DIO encoder
  */
-
-#define TM1637_DIO_SYMBOLS_LEN              (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
 #define TM1637_DIO_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
@@ -191,143 +141,35 @@ err:
     .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
 })
 
-typedef struct {
-    rmt_encoder_t base;
-    rmt_encoder_t *copy_encoder;
-    rmt_encoder_t *bytes_encoder;
-    rmt_symbol_word_t tm1637_dio_start_symbol;
-    rmt_symbol_word_t tm1637_dio_ack1_symbol;
-    rmt_symbol_word_t tm1637_dio_ack2_symbol;
-    rmt_symbol_word_t tm1637_dio_stop_symbol;
-    int state;
-} rmt_tm1637_dio_encoder_t;
-
-static IRAM_ATTR size_t rmt_encode_tm1637_dio(rmt_encoder_t *encoder, rmt_channel_handle_t channel, const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state)
+static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t data_size,
+                               size_t symbols_written, size_t symbols_free,
+                               rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    rmt_tm1637_dio_encoder_t *tm1637_dio_encoder = __containerof(encoder, rmt_tm1637_dio_encoder_t, base);
-    rmt_encode_state_t session_state = RMT_ENCODING_RESET;
-    rmt_encode_state_t state = RMT_ENCODING_RESET;
-    size_t encoded_symbols = 0;
-    uint8_t *byte = (uint8_t*)primary_data;
-    rmt_encoder_handle_t copy_encoder = tm1637_dio_encoder->copy_encoder;
-    rmt_encoder_handle_t bytes_encoder = tm1637_dio_encoder->bytes_encoder;
-    switch (tm1637_dio_encoder->state) {
-    case 0: // send start symbol
-        encoded_symbols += copy_encoder->encode(copy_encoder, channel, &tm1637_dio_encoder->tm1637_dio_start_symbol,
-                                                sizeof(rmt_symbol_word_t), &session_state);
-        if (session_state & RMT_ENCODING_COMPLETE) {
-            tm1637_dio_encoder->state = 1; // we can only switch to next state when current encoder finished
+    size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
+    size_t symbol_pos = 0;
+    uint8_t *data_bytes = (uint8_t*)data;
+
+    while (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+        symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RESOLUTION_HZ);
+        for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
+            if (data_bytes[data_pos] & bitmask) {
+                symbols[symbol_pos++] = TM1637_DIO_BIT1_SYMBOL(TM1637_RESOLUTION_HZ);
+            } else {
+                symbols[symbol_pos++] = TM1637_DIO_BIT0_SYMBOL(TM1637_RESOLUTION_HZ);
+            }
         }
-        if (session_state & RMT_ENCODING_MEM_FULL) {
-            state |= RMT_ENCODING_MEM_FULL;
-            goto out; // yield if there's no free space to put other encoding artifacts
-        }
-    // fall-through
-    case 1: // send byte
-        encoded_symbols += bytes_encoder->encode(bytes_encoder, channel, &byte, sizeof(*byte), &session_state);
-        if (session_state & RMT_ENCODING_COMPLETE) {
-            tm1637_dio_encoder->state = 2; // we can only switch to next state when current encoder finished
-        }
-        if (session_state & RMT_ENCODING_MEM_FULL) {
-            state |= RMT_ENCODING_MEM_FULL;
-            goto out; // yield if there's no free space to put other encoding artifacts
-        }
-    // fall-through
-    case 2: // send ack1 symbol
-        encoded_symbols += copy_encoder->encode(copy_encoder, channel, &tm1637_dio_encoder->tm1637_dio_ack1_symbol,
-                                                sizeof(rmt_symbol_word_t), &session_state);
-        if (session_state & RMT_ENCODING_COMPLETE) {
-            tm1637_dio_encoder->state = 3; // we can only switch to next state when current encoder finished
-        }
-        if (session_state & RMT_ENCODING_MEM_FULL) {
-            state |= RMT_ENCODING_MEM_FULL;
-            goto out; // yield if there's no free space to put other encoding artifacts
-        }
-    // fall-through
-    case 3: // send ack2 symbol
-        encoded_symbols += copy_encoder->encode(copy_encoder, channel, &tm1637_dio_encoder->tm1637_dio_ack2_symbol,
-                                                sizeof(rmt_symbol_word_t), &session_state);
-        if (session_state & RMT_ENCODING_COMPLETE) {
-            tm1637_dio_encoder->state = 4; // we can only switch to next state when current encoder finished
-        }
-        if (session_state & RMT_ENCODING_MEM_FULL) {
-            state |= RMT_ENCODING_MEM_FULL;
-            goto out; // yield if there's no free space to put other encoding artifacts
-        }
-    // fall-through
-    case 4: // send stop symbol
-        encoded_symbols += copy_encoder->encode(copy_encoder, channel, &tm1637_dio_encoder->tm1637_dio_stop_symbol,
-                                                sizeof(rmt_symbol_word_t), &session_state);
-        if (session_state & RMT_ENCODING_COMPLETE) {
-            tm1637_dio_encoder->state = RMT_ENCODING_RESET; // back to the initial encoding session
-            state |= RMT_ENCODING_COMPLETE;
-        }
-        if (session_state & RMT_ENCODING_MEM_FULL) {
-            state |= RMT_ENCODING_MEM_FULL;
-            goto out; // yield if there's no free space to put other encoding artifacts
-        }
+        symbols[symbol_pos++] = TM1637_DIO_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_DIO_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+        data_pos++;
+        symbols_free -= TM1637_RMT_SYMBOLS_PER_BYTE;
     }
-out:
-    *ret_state = state;
-    return encoded_symbols;
-}
 
-static esp_err_t rmt_del_tm1637_dio_encoder(rmt_encoder_t *encoder)
-{
-    rmt_tm1637_dio_encoder_t *tm1637_dio_encoder = __containerof(encoder, rmt_tm1637_dio_encoder_t, base);
-    rmt_del_encoder(tm1637_dio_encoder->copy_encoder);
-    rmt_del_encoder(tm1637_dio_encoder->bytes_encoder);
-    free(tm1637_dio_encoder);
-    return ESP_OK;
-}
-
-static esp_err_t rmt_tm1637_dio_encoder_reset(rmt_encoder_t *encoder)
-{
-    rmt_tm1637_dio_encoder_t *tm1637_dio_encoder = __containerof(encoder, rmt_tm1637_dio_encoder_t, base);
-    rmt_encoder_reset(tm1637_dio_encoder->copy_encoder);
-    rmt_encoder_reset(tm1637_dio_encoder->bytes_encoder);
-    tm1637_dio_encoder->state = RMT_ENCODING_RESET;
-    return ESP_OK;
-}
-
-static esp_err_t rmt_new_tm1637_dio_encoder(const tm1637_encoder_config_t *config, rmt_encoder_handle_t *ret_encoder)
-{
-    esp_err_t ret = ESP_OK;
-    rmt_tm1637_dio_encoder_t *tm1637_dio_encoder = NULL;
-    ESP_GOTO_ON_FALSE(config && ret_encoder, ESP_ERR_INVALID_ARG, err, TAG, "invalid argument");
-    tm1637_dio_encoder = rmt_alloc_encoder_mem(sizeof(rmt_tm1637_dio_encoder_t));
-    ESP_GOTO_ON_FALSE(tm1637_dio_encoder, ESP_ERR_NO_MEM, err, TAG, "no mem for tm1637 dio encoder");
-    tm1637_dio_encoder->base.encode = rmt_encode_tm1637_dio;
-    tm1637_dio_encoder->base.del = rmt_del_tm1637_dio_encoder;
-    tm1637_dio_encoder->base.reset = rmt_tm1637_dio_encoder_reset;
-
-    rmt_copy_encoder_config_t copy_encoder_config = {};
-    ESP_GOTO_ON_ERROR(rmt_new_copy_encoder(&copy_encoder_config, &tm1637_dio_encoder->copy_encoder), err, TAG, "create copy encoder failed");
-
-    tm1637_dio_encoder->tm1637_dio_start_symbol = TM1637_DIO_START_SYMBOL(config->resolution);
-    tm1637_dio_encoder->tm1637_dio_ack1_symbol = TM1637_DIO_ACK1_SYMBOL(config->resolution);
-    tm1637_dio_encoder->tm1637_dio_ack2_symbol = TM1637_DIO_ACK2_SYMBOL(config->resolution);
-    tm1637_dio_encoder->tm1637_dio_stop_symbol = TM1637_DIO_STOP_SYMBOL(config->resolution);
-
-    rmt_bytes_encoder_config_t bytes_encoder_config = {
-        .bit0 = TM1637_DIO_BIT0_SYMBOL(config->resolution),
-        .bit1 = TM1637_DIO_BIT1_SYMBOL(config->resolution),
-    };
-    ESP_GOTO_ON_ERROR(rmt_new_bytes_encoder(&bytes_encoder_config, &tm1637_dio_encoder->bytes_encoder), err, TAG, "create bytes encoder failed");
-
-    *ret_encoder = &tm1637_dio_encoder->base;
-    return ESP_OK;
-err:
-    if (tm1637_dio_encoder) {
-        if (tm1637_dio_encoder->copy_encoder) {
-            rmt_del_encoder(tm1637_dio_encoder->copy_encoder);
-        }
-        if (tm1637_dio_encoder->bytes_encoder) {
-            rmt_del_encoder(tm1637_dio_encoder->bytes_encoder);
-        }
-        free(tm1637_dio_encoder);
+    if (data_pos >= data_size) {
+        *done = 1;
     }
-    return ret;
+
+    return symbol_pos;
 }
 
 void __attribute__((unused)) rmt_test(void)
@@ -348,11 +190,12 @@ void __attribute__((unused)) rmt_test(void)
     ESP_ERROR_CHECK(rmt_new_tx_channel(&clk_tx_channel_cfg, &tm1637_clk_tx_channel));
 
     ESP_LOGI(TAG, "install tm1637 clk encoder");
-    tm1637_encoder_config_t tm1637_clk_encoder_cfg = {
-        .resolution = TM1637_RESOLUTION_HZ,
-    };
     rmt_encoder_handle_t tm1637_clk_encoder = NULL;
-    ESP_ERROR_CHECK(rmt_new_tm1637_clk_encoder(&tm1637_clk_encoder_cfg, &tm1637_clk_encoder));
+    const rmt_simple_encoder_config_t tm1637_clk_simple_encoder_cfg = {
+        .callback = tm1637_clk_encoder_callback,
+        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
+    };
+    ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_clk_simple_encoder_cfg, &tm1637_clk_encoder));
 
     ESP_LOGI(TAG, "enable tm1637 clk RMT TX channel");
     ESP_ERROR_CHECK(rmt_enable(tm1637_clk_tx_channel));
@@ -378,11 +221,12 @@ void __attribute__((unused)) rmt_test(void)
     ESP_ERROR_CHECK(rmt_new_tx_channel(&dio_tx_channel_cfg, &tm1637_dio_tx_channel));
 
     ESP_LOGI(TAG, "install tm1637 dio encoder");
-    tm1637_encoder_config_t tm1637_dio_encoder_cfg = {
-        .resolution = TM1637_RESOLUTION_HZ,
-    };
     rmt_encoder_handle_t tm1637_dio_encoder = NULL;
-    ESP_ERROR_CHECK(rmt_new_tm1637_dio_encoder(&tm1637_dio_encoder_cfg, &tm1637_dio_encoder));
+    const rmt_simple_encoder_config_t tm1637_dio_simple_encoder_cfg = {
+        .callback = tm1637_dio_encoder_callback,
+        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
+    };
+    ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_dio_simple_encoder_cfg, &tm1637_dio_encoder));
 
     ESP_LOGI(TAG, "enable tm1637 dio RMT TX channel");
     ESP_ERROR_CHECK(rmt_enable(tm1637_dio_tx_channel));
@@ -407,8 +251,12 @@ void __attribute__((unused)) rmt_test(void)
     };
     ESP_ERROR_CHECK(rmt_new_sync_manager(&synchro_config, &synchro));
 
+    uint8_t test_data[] = {
+        0, 1, 2, 3, 4, 5, 6, 7,
+        8, 9, 10, 11, 12, 13, 14, 15,
+    };
+
     while (1) {
-        uint8_t data = 0xff;
 
         ESP_ERROR_CHECK(rmt_sync_reset(synchro));
 
@@ -416,8 +264,8 @@ void __attribute__((unused)) rmt_test(void)
         ESP_LOGW(TAG, "max frequency with res=%d: %d", TM1637_RESOLUTION_HZ, TM1637_MAX_FREQUENCY(TM1637_RESOLUTION_HZ));
 
         for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
-            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(data), i);
-            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], &data, sizeof(data), &transmit_configs[i]));
+            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(test_data), i);
+            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], test_data, sizeof(test_data), &transmit_configs[i]));
         }
 
         for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
@@ -426,6 +274,6 @@ void __attribute__((unused)) rmt_test(void)
         }
 
         ESP_LOGI(TAG, "done! waiting for another round... :)");
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(60000));
     }
 }
