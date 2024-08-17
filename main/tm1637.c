@@ -12,13 +12,13 @@
 
 #include "tm1637.h"
 
-#define TM1637_RESOLUTION_HZ                (2000000) // 2MHz resolution, 1 tick = 0.5us
-#define TM1637_FREQUENCY                    (100000)
+#define TM1637_RMT_RESOLUTION_HZ            (2 * 1000 * 1000)   // 2MHz resolution, 1 tick = 0.5us
+#define TM1637_FREQUENCY_HZ                 (100 * 1000)        // 100kHz
 #define TM1637_CLK_GPIO_NUM                 (0)
 #define TM1637_DIO_GPIO_NUM                 (1)
 
 #define TM1637_VALUES_PER_PERIOD            (4)
-#define TM1637_QUARTER_PERIOD_IN_TICKS(res) (1ULL * (res) / (TM1637_VALUES_PER_PERIOD * TM1637_FREQUENCY))
+#define TM1637_QUARTER_PERIOD_IN_TICKS(res) (1ULL * (res) / (TM1637_VALUES_PER_PERIOD * TM1637_FREQUENCY_HZ))
 #define TM1637_CHANNELS_NUM                 (2)
 
 #define RMT_MAX_TICKS                       ((1U << 15) - 1)
@@ -101,21 +101,21 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
     if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
-            symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RESOLUTION_HZ);
+            symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
 
         // Send bit symbols
         for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
-            symbols[symbol_pos++] = TM1637_CLK_BIT_SYMBOL(TM1637_RESOLUTION_HZ);
+            symbols[symbol_pos++] = TM1637_CLK_BIT_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
 
         // Send ack symbols
-        symbols[symbol_pos++] = TM1637_CLK_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
-        symbols[symbol_pos++] = TM1637_CLK_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_CLK_ACK1_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_CLK_ACK2_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
 
         // If this is the last byte, send the stop symbol and signal completion
         if (data_pos == data_size - 1) {
-            symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+            symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
         }
     }
@@ -180,25 +180,25 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
     if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
-            symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RESOLUTION_HZ);
+            symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
 
         // Send bit symbols
         for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
             if (data_bytes[data_pos] & bitmask) {
-                symbols[symbol_pos++] = TM1637_DIO_BIT1_SYMBOL(TM1637_RESOLUTION_HZ);
+                symbols[symbol_pos++] = TM1637_DIO_BIT1_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             } else {
-                symbols[symbol_pos++] = TM1637_DIO_BIT0_SYMBOL(TM1637_RESOLUTION_HZ);
+                symbols[symbol_pos++] = TM1637_DIO_BIT0_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             }
         }
 
         // Send ack symbols
-        symbols[symbol_pos++] = TM1637_DIO_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
-        symbols[symbol_pos++] = TM1637_DIO_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_DIO_ACK1_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
+        symbols[symbol_pos++] = TM1637_DIO_ACK2_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
 
         // If this is the last byte, send the stop symbol and signal completion
         if (data_pos == data_size - 1) {
-            symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+            symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
         }
     }
@@ -215,7 +215,7 @@ void __attribute__((unused)) rmt_test(void)
     ESP_LOGI(TAG, "create tm1637 clk RMT TX channel");
     rmt_tx_channel_config_t clk_tx_channel_cfg = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = TM1637_RESOLUTION_HZ,
+        .resolution_hz = TM1637_RMT_RESOLUTION_HZ,
         .mem_block_symbols = 48, // amount of RMT symbols that the channel can store at a time
         .trans_queue_depth = 4,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
         .gpio_num = TM1637_CLK_GPIO_NUM,
@@ -246,7 +246,7 @@ void __attribute__((unused)) rmt_test(void)
     ESP_LOGI(TAG, "create tm1637 dio RMT TX channel");
     rmt_tx_channel_config_t dio_tx_channel_cfg = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = TM1637_RESOLUTION_HZ,
+        .resolution_hz = TM1637_RMT_RESOLUTION_HZ,
         .mem_block_symbols = 48, // amount of RMT symbols that the channel can store at a time
         .trans_queue_depth = 4,  // number of transactions that allowed to pending in the background, this example won't queue multiple transactions, so queue depth > 1 is sufficient
         .gpio_num = TM1637_DIO_GPIO_NUM,
@@ -293,8 +293,8 @@ void __attribute__((unused)) rmt_test(void)
     uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_7 | TM1637_CMD3_DISPLAY_ON };
 
     while (1) {
-        ESP_LOGW(TAG, "min frequency with res=%d: %d", TM1637_RESOLUTION_HZ, TM1637_MIN_FREQUENCY(TM1637_RESOLUTION_HZ));
-        ESP_LOGW(TAG, "max frequency with res=%d: %d", TM1637_RESOLUTION_HZ, TM1637_MAX_FREQUENCY(TM1637_RESOLUTION_HZ));
+        ESP_LOGW(TAG, "min frequency with res=%d: %d", TM1637_RMT_RESOLUTION_HZ, TM1637_MIN_FREQUENCY(TM1637_RMT_RESOLUTION_HZ));
+        ESP_LOGW(TAG, "max frequency with res=%d: %d", TM1637_RMT_RESOLUTION_HZ, TM1637_MAX_FREQUENCY(TM1637_RMT_RESOLUTION_HZ));
 
         for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
             ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(cmd1), i);
