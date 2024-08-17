@@ -31,6 +31,27 @@
 
 static const char *TAG = "tm1637";
 
+#define TM1637_CMD1_BASE                    (0x40)
+#define TM1637_CMD1_OPERATION_WRITE         (0x00)
+#define TM1637_CMD1_OPERATION_READ          (0x02)
+#define TM1637_CMD1_ADDR_AUTOINC            (0x00)
+#define TM1637_CMD1_ADDR_FIXED              (0x04)
+
+#define TM1637_CMD2_BASE                    (0xc0) // apply bitwise OR with 0-5 to select start address,
+                                                   // and follow with segment data bytes
+
+#define TM1637_CMD3_BASE                    (0x80)
+#define TM1637_CMD3_BRIGHTNESS_0            (0x00)
+#define TM1637_CMD3_BRIGHTNESS_1            (0x01)
+#define TM1637_CMD3_BRIGHTNESS_2            (0x02)
+#define TM1637_CMD3_BRIGHTNESS_3            (0x03)
+#define TM1637_CMD3_BRIGHTNESS_4            (0x04)
+#define TM1637_CMD3_BRIGHTNESS_5            (0x05)
+#define TM1637_CMD3_BRIGHTNESS_6            (0x06)
+#define TM1637_CMD3_BRIGHTNESS_7            (0x07)
+#define TM1637_CMD3_DISPLAY_ON              (0x00)
+#define TM1637_CMD3_DISPLAY_OFF             (0x08)
+
 /*
  * CLK encoder
  */
@@ -264,27 +285,46 @@ void __attribute__((unused)) rmt_test(void)
     };
     ESP_ERROR_CHECK(rmt_new_sync_manager(&synchro_config, &synchro));
 
-    uint8_t test_data[] = {
-        0, 1, 2, 3, 4, 5, 6, 7,
-        8, 9, 10, 11, 12, 13, 14, 15,
-    };
+    // Set write mode, autoinc addr mode
+    uint8_t cmd1[] = { TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC };
+    // Set start address to segment 0, enable all segments of all digits
+    uint8_t cmd2[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+    // Set brightness to maximum, enable display
+    uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_7 | TM1637_CMD3_DISPLAY_ON };
 
     while (1) {
-
-        ESP_ERROR_CHECK(rmt_sync_reset(synchro));
-
         ESP_LOGW(TAG, "min frequency with res=%d: %d", TM1637_RESOLUTION_HZ, TM1637_MIN_FREQUENCY(TM1637_RESOLUTION_HZ));
         ESP_LOGW(TAG, "max frequency with res=%d: %d", TM1637_RESOLUTION_HZ, TM1637_MAX_FREQUENCY(TM1637_RESOLUTION_HZ));
 
         for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
-            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(test_data), i);
-            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], test_data, sizeof(test_data), &transmit_configs[i]));
+            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(cmd1), i);
+            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], cmd1, sizeof(cmd1), &transmit_configs[i]));
         }
-
         for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
             ESP_LOGI(TAG, "awaiting end of transmission on channel %d", i);
             ESP_ERROR_CHECK(rmt_tx_wait_all_done(tx_channels[i], portMAX_DELAY));
         }
+        ESP_ERROR_CHECK(rmt_sync_reset(synchro));
+
+        for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
+            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(cmd2), i);
+            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], cmd2, sizeof(cmd2), &transmit_configs[i]));
+        }
+        for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
+            ESP_LOGI(TAG, "awaiting end of transmission on channel %d", i);
+            ESP_ERROR_CHECK(rmt_tx_wait_all_done(tx_channels[i], portMAX_DELAY));
+        }
+        ESP_ERROR_CHECK(rmt_sync_reset(synchro));
+
+        for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
+            ESP_LOGI(TAG, "transmitting %d bytes on channel %d", sizeof(cmd3), i);
+            ESP_ERROR_CHECK(rmt_transmit(tx_channels[i], tx_encoders[i], cmd3, sizeof(cmd3), &transmit_configs[i]));
+        }
+        for (int i = 0; i < TM1637_CHANNELS_NUM; i++) {
+            ESP_LOGI(TAG, "awaiting end of transmission on channel %d", i);
+            ESP_ERROR_CHECK(rmt_tx_wait_all_done(tx_channels[i], portMAX_DELAY));
+        }
+        ESP_ERROR_CHECK(rmt_sync_reset(synchro));
 
         ESP_LOGI(TAG, "done! waiting for another round... :)");
         vTaskDelay(pdMS_TO_TICKS(60000));
