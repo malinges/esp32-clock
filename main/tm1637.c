@@ -18,7 +18,7 @@
 #define TM1637_DIO_GPIO_NUM                 (1)
 
 #define TM1637_VALUES_PER_PERIOD            (4)
-#define TM1637_BASE_DURATION_IN_TICKS(res)  (1ULL * (res) / (TM1637_VALUES_PER_PERIOD * TM1637_FREQUENCY))
+#define TM1637_QUARTER_PERIOD_IN_TICKS(res) (1ULL * (res) / (TM1637_VALUES_PER_PERIOD * TM1637_FREQUENCY))
 #define TM1637_CHANNELS_NUM                 (2)
 
 #define RMT_MAX_TICKS                       ((1U << 15) - 1)
@@ -37,37 +37,37 @@ static const char *TAG = "tm1637";
 
 #define TM1637_CLK_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_BIT_SYMBOL(res)      ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_ACK1_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
-    .duration0 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t data_size,
@@ -102,44 +102,44 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
 
 #define TM1637_DIO_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_BIT0_SYMBOL(res)    ((rmt_symbol_word_t) {   \
     .level0 = 0,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_BIT1_SYMBOL(res)    ((rmt_symbol_word_t) {   \
     .level0 = 1,                                                \
-    .duration0 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_ACK1_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 1 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_BASE_DURATION_IN_TICKS(res),        \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t data_size,
