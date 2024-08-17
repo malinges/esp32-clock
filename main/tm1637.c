@@ -12,6 +12,17 @@
 
 #include "tm1637.h"
 
+// TODO:
+// - startup sequence, if necessary (make sure DIO goes high before CLK
+//   to avoid triggering a signal stop condition by mistake, maybe by
+//   creating a dedicated encoder and symbols?)
+// - create a public API:
+//   - configurable resolution and frequency
+//   - deinit
+// - factorize CLK and DIO encoders? (might not be worthwhile)
+// - rework command building (defines are a bit crude)
+// - make this an esp-idf component
+
 #define TM1637_RMT_RESOLUTION_HZ            (2 * 1000 * 1000)   // 2MHz resolution, 1 tick = 0.5us
 #define TM1637_FREQUENCY_HZ                 (100 * 1000)        // 100kHz
 #define TM1637_CLK_GPIO_NUM                 (0)
