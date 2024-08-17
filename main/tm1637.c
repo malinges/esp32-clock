@@ -22,12 +22,12 @@
 #define TM1637_CHANNELS_NUM                 (2)
 
 #define RMT_MAX_TICKS                       ((1U << 15) - 1)
-#define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER  (2)
+#define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER  (4)
 #define CEIL(x, y)                          (((x) + (y) - 1) / (y))
 #define TM1637_MIN_FREQUENCY(res)           CEIL(CEIL((res), RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_VALUES_PER_PERIOD)
 #define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_VALUES_PER_PERIOD)
 
-#define TM1637_RMT_SYMBOLS_PER_BYTE         (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
+#define TM1637_MAX_RMT_SYMBOLS_PER_BYTE     (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
 static const char *TAG = "tm1637";
 
@@ -36,10 +36,10 @@ static const char *TAG = "tm1637";
  */
 
 #define TM1637_CLK_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
-    .level0 = 0,                                                \
+    .level0 = 1,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_BIT_SYMBOL(res)      ((rmt_symbol_word_t) {  \
@@ -53,20 +53,20 @@ static const char *TAG = "tm1637";
     .level0 = 1,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 4 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
-    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
-    .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .level1 = 1,                                                \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
     .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
-    .level1 = 0,                                                \
+    .level1 = 1,                                                \
     .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
@@ -74,23 +74,29 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
                                size_t symbols_written, size_t symbols_free,
                                rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
+    size_t data_pos = symbols_written / TM1637_MAX_RMT_SYMBOLS_PER_BYTE;
     size_t symbol_pos = 0;
 
-    while (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
-        symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RESOLUTION_HZ);
+    if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+        // If this is the first byte, send the start symbol
+        if (data_pos == 0) {
+            symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RESOLUTION_HZ);
+        }
+
+        // Send bit symbols
         for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
             symbols[symbol_pos++] = TM1637_CLK_BIT_SYMBOL(TM1637_RESOLUTION_HZ);
         }
+
+        // Send ack symbols
         symbols[symbol_pos++] = TM1637_CLK_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
         symbols[symbol_pos++] = TM1637_CLK_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
-        symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
-        data_pos++;
-        symbols_free -= TM1637_RMT_SYMBOLS_PER_BYTE;
-    }
 
-    if (data_pos >= data_size) {
-        *done = 1;
+        // If this is the last byte, send the stop symbol and signal completion
+        if (data_pos == data_size - 1) {
+            symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+            *done = 1;
+        }
     }
 
     return symbol_pos;
@@ -101,10 +107,10 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
  */
 
 #define TM1637_DIO_START_SYMBOL(res)    ((rmt_symbol_word_t) {  \
-    .level0 = 1,                                                \
+    .level0 = 0,                                                \
     .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_BIT0_SYMBOL(res)    ((rmt_symbol_word_t) {   \
@@ -123,35 +129,40 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
 
 #define TM1637_DIO_ACK1_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 3 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
-    .level0 = 0,                                                \
+    .level0 = 1,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t data_size,
                                size_t symbols_written, size_t symbols_free,
                                rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
+    size_t data_pos = symbols_written / TM1637_MAX_RMT_SYMBOLS_PER_BYTE;
     size_t symbol_pos = 0;
     uint8_t *data_bytes = (uint8_t*)data;
 
-    while (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
-        symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RESOLUTION_HZ);
+    if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+        // If this is the first byte, send the start symbol
+        if (data_pos == 0) {
+            symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RESOLUTION_HZ);
+        }
+
+        // Send bit symbols
         for (uint8_t bitmask = 0x01; bitmask != 0; bitmask <<= 1) {
             if (data_bytes[data_pos] & bitmask) {
                 symbols[symbol_pos++] = TM1637_DIO_BIT1_SYMBOL(TM1637_RESOLUTION_HZ);
@@ -159,15 +170,16 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
                 symbols[symbol_pos++] = TM1637_DIO_BIT0_SYMBOL(TM1637_RESOLUTION_HZ);
             }
         }
+
+        // Send ack symbols
         symbols[symbol_pos++] = TM1637_DIO_ACK1_SYMBOL(TM1637_RESOLUTION_HZ);
         symbols[symbol_pos++] = TM1637_DIO_ACK2_SYMBOL(TM1637_RESOLUTION_HZ);
-        symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
-        data_pos++;
-        symbols_free -= TM1637_RMT_SYMBOLS_PER_BYTE;
-    }
 
-    if (data_pos >= data_size) {
-        *done = 1;
+        // If this is the last byte, send the stop symbol and signal completion
+        if (data_pos == data_size - 1) {
+            symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RESOLUTION_HZ);
+            *done = 1;
+        }
     }
 
     return symbol_pos;
@@ -194,7 +206,7 @@ void __attribute__((unused)) rmt_test(void)
     rmt_encoder_handle_t tm1637_clk_encoder = NULL;
     const rmt_simple_encoder_config_t tm1637_clk_simple_encoder_cfg = {
         .callback = tm1637_clk_encoder_callback,
-        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
+        .min_chunk_size = TM1637_MAX_RMT_SYMBOLS_PER_BYTE,
     };
     ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_clk_simple_encoder_cfg, &tm1637_clk_encoder));
 
@@ -225,7 +237,7 @@ void __attribute__((unused)) rmt_test(void)
     rmt_encoder_handle_t tm1637_dio_encoder = NULL;
     const rmt_simple_encoder_config_t tm1637_dio_simple_encoder_cfg = {
         .callback = tm1637_dio_encoder_callback,
-        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
+        .min_chunk_size = TM1637_MAX_RMT_SYMBOLS_PER_BYTE,
     };
     ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_dio_simple_encoder_cfg, &tm1637_dio_encoder));
 
