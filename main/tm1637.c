@@ -248,7 +248,7 @@ void __attribute__((unused)) rmt_test(void)
     rmt_transmit_config_t tm1637_clk_transmit_config = {
         .loop_count = 0, // no loop
         .flags = {
-            .eot_level = 0,
+            .eot_level = 1,
         },
     };
 
