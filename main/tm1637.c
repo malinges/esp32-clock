@@ -323,11 +323,11 @@ void __attribute__((unused)) rmt_test(void)
     ESP_ERROR_CHECK(rmt_new_sync_manager(&synchro_config, &synchro));
 
     // Set write mode, autoinc addr mode
-    uint8_t cmd1[] = { TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC };
+    const uint8_t cmd1[] = { TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC };
     // Set start address to segment 0, enable all segments of all digits
-    uint8_t cmd2[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+    const uint8_t cmd2[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
     // Set brightness to maximum, enable display
-    uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_7 | TM1637_CMD3_DISPLAY_ON };
+    const uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_7 | TM1637_CMD3_DISPLAY_ON };
 
     while (1) {
         ESP_LOGW(TAG, "min frequency with res=%d: %d", TM1637_RMT_RESOLUTION_HZ, TM1637_MIN_FREQUENCY(TM1637_RMT_RESOLUTION_HZ));
