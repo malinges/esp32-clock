@@ -60,8 +60,8 @@ static const char *TAG = "tm1637";
 #define TM1637_CMD3_BRIGHTNESS_5            (0x05)
 #define TM1637_CMD3_BRIGHTNESS_6            (0x06)
 #define TM1637_CMD3_BRIGHTNESS_7            (0x07)
-#define TM1637_CMD3_DISPLAY_ON              (0x00)
-#define TM1637_CMD3_DISPLAY_OFF             (0x08)
+#define TM1637_CMD3_DISPLAY_OFF             (0x00)
+#define TM1637_CMD3_DISPLAY_ON              (0x08)
 
 /*
  * CLK encoder
