@@ -38,7 +38,7 @@
 #define TM1637_MIN_FREQUENCY(res)           CEIL(CEIL((res), RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_VALUES_PER_PERIOD)
 #define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_VALUES_PER_PERIOD)
 
-#define TM1637_MAX_RMT_SYMBOLS_PER_BYTE     (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
+#define TM1637_RMT_SYMBOLS_PER_BYTE         (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
 static const char *TAG = "tm1637";
 
@@ -95,6 +95,13 @@ static const char *TAG = "tm1637";
     .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
+#define TM1637_CLK_PADDING_SYMBOL(res)  ((rmt_symbol_word_t) {  \
+    .level0 = 1,                                                \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .level1 = 1,                                                \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+})
+
 #define TM1637_CLK_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
     .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
@@ -106,10 +113,10 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
                                size_t symbols_written, size_t symbols_free,
                                rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    size_t data_pos = symbols_written / TM1637_MAX_RMT_SYMBOLS_PER_BYTE;
+    const size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
     size_t symbol_pos = 0;
 
-    if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+    if (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
             symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
@@ -128,6 +135,10 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
         if (data_pos == data_size - 1) {
             symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
+        }
+
+        while (symbol_pos < TM1637_RMT_SYMBOLS_PER_BYTE) {
+            symbols[symbol_pos++] = TM1637_CLK_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
     }
 
@@ -173,6 +184,13 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
     .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
+#define TM1637_DIO_PADDING_SYMBOL(res)  ((rmt_symbol_word_t) {  \
+    .level0 = 0,                                                \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .level1 = 0,                                                \
+    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+})
+
 #define TM1637_DIO_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 1,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
@@ -184,11 +202,11 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
                                size_t symbols_written, size_t symbols_free,
                                rmt_symbol_word_t *symbols, bool *done, void *arg)
 {
-    size_t data_pos = symbols_written / TM1637_MAX_RMT_SYMBOLS_PER_BYTE;
+    const size_t data_pos = symbols_written / TM1637_RMT_SYMBOLS_PER_BYTE;
     size_t symbol_pos = 0;
-    uint8_t *data_bytes = (uint8_t*)data;
+    const uint8_t *data_bytes = (uint8_t*)data;
 
-    if (symbols_free >= TM1637_MAX_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
+    if (symbols_free >= TM1637_RMT_SYMBOLS_PER_BYTE && data_pos < data_size) {
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
             symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
@@ -211,6 +229,10 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
         if (data_pos == data_size - 1) {
             symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
+        }
+
+        while (symbol_pos < TM1637_RMT_SYMBOLS_PER_BYTE) {
+            symbols[symbol_pos++] = TM1637_DIO_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
     }
 
@@ -235,11 +257,11 @@ void __attribute__((unused)) rmt_test(void)
     ESP_ERROR_CHECK(rmt_new_tx_channel(&clk_tx_channel_cfg, &tm1637_clk_tx_channel));
 
     ESP_LOGI(TAG, "install tm1637 clk encoder");
-    rmt_encoder_handle_t tm1637_clk_encoder = NULL;
     const rmt_simple_encoder_config_t tm1637_clk_simple_encoder_cfg = {
         .callback = tm1637_clk_encoder_callback,
-        .min_chunk_size = TM1637_MAX_RMT_SYMBOLS_PER_BYTE,
+        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
     };
+    rmt_encoder_handle_t tm1637_clk_encoder = NULL;
     ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_clk_simple_encoder_cfg, &tm1637_clk_encoder));
 
     ESP_LOGI(TAG, "enable tm1637 clk RMT TX channel");
@@ -266,11 +288,11 @@ void __attribute__((unused)) rmt_test(void)
     ESP_ERROR_CHECK(rmt_new_tx_channel(&dio_tx_channel_cfg, &tm1637_dio_tx_channel));
 
     ESP_LOGI(TAG, "install tm1637 dio encoder");
-    rmt_encoder_handle_t tm1637_dio_encoder = NULL;
     const rmt_simple_encoder_config_t tm1637_dio_simple_encoder_cfg = {
         .callback = tm1637_dio_encoder_callback,
-        .min_chunk_size = TM1637_MAX_RMT_SYMBOLS_PER_BYTE,
+        .min_chunk_size = TM1637_RMT_SYMBOLS_PER_BYTE,
     };
+    rmt_encoder_handle_t tm1637_dio_encoder = NULL;
     ESP_ERROR_CHECK(rmt_new_simple_encoder(&tm1637_dio_simple_encoder_cfg, &tm1637_dio_encoder));
 
     ESP_LOGI(TAG, "enable tm1637 dio RMT TX channel");
