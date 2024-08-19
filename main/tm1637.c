@@ -103,10 +103,10 @@ static const char *TAG = "tm1637";
 })
 
 #define TM1637_CLK_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
-    .level0 = 1,                                                \
+    .level0 = 0,                                                \
     .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 3 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t data_size,
@@ -120,6 +120,8 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
             symbols[symbol_pos++] = TM1637_CLK_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
+        } else {
+            symbols[symbol_pos++] = TM1637_CLK_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
 
         // Send bit symbols
@@ -135,13 +137,13 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
         if (data_pos == data_size - 1) {
             symbols[symbol_pos++] = TM1637_CLK_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
-        }
-
-        while (symbol_pos < TM1637_RMT_SYMBOLS_PER_BYTE) {
+        } else {
             symbols[symbol_pos++] = TM1637_CLK_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
     }
 
+    // ESP_EARLY_LOGI(TAG, "[clk] data_pos=%u data_size=%u symbols_written=%u symbols_free=%u symbol_pos=%u done=%d",
+    //     data_pos, data_size, symbols_written, symbols_free, symbol_pos, (int)*done);
     return symbol_pos;
 }
 
@@ -192,10 +194,10 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
 })
 
 #define TM1637_DIO_STOP_SYMBOL(res)     ((rmt_symbol_word_t) {  \
-    .level0 = 1,                                                \
-    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .level0 = 0,                                                \
+    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 1,                                                \
-    .duration1 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t data_size,
@@ -210,6 +212,8 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
         // If this is the first byte, send the start symbol
         if (data_pos == 0) {
             symbols[symbol_pos++] = TM1637_DIO_START_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
+        } else {
+            symbols[symbol_pos++] = TM1637_DIO_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
 
         // Send bit symbols
@@ -229,13 +233,13 @@ static IRAM_ATTR size_t tm1637_dio_encoder_callback(const void *data, size_t dat
         if (data_pos == data_size - 1) {
             symbols[symbol_pos++] = TM1637_DIO_STOP_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
             *done = 1;
-        }
-
-        while (symbol_pos < TM1637_RMT_SYMBOLS_PER_BYTE) {
+        } else {
             symbols[symbol_pos++] = TM1637_DIO_PADDING_SYMBOL(TM1637_RMT_RESOLUTION_HZ);
         }
     }
 
+    // ESP_EARLY_LOGI(TAG, "[dio] data_pos=%u data_size=%u symbols_written=%u symbols_free=%u symbol_pos=%u done=%d",
+    //     data_pos, data_size, symbols_written, symbols_free, symbol_pos, (int)*done);
     return symbol_pos;
 }
 
