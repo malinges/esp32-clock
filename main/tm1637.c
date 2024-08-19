@@ -17,7 +17,7 @@
 //   to avoid triggering a signal stop condition by mistake, maybe by
 //   creating a dedicated encoder and symbols?)
 // - create a public API:
-//   - configurable resolution and frequency
+//   - configurable resolution, frequency, gpios, etc.
 //   - deinit
 // - factorize CLK and DIO encoders? (might not be worthwhile)
 // - rework command building (defines are a bit crude)
