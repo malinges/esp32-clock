@@ -33,7 +33,7 @@
 #define TM1637_CHANNELS_NUM                 (2)
 
 #define RMT_MAX_TICKS                       ((1U << 15) - 1)
-#define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER  (4)
+#define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER  (3)
 #define CEIL(x, y)                          (((x) + (y) - 1) / (y))
 #define TM1637_MIN_FREQUENCY(res)           CEIL(CEIL((res), RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_VALUES_PER_PERIOD)
 #define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_VALUES_PER_PERIOD)
@@ -85,7 +85,7 @@ static const char *TAG = "tm1637";
     .level0 = 1,                                                \
     .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 4 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_CLK_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
@@ -174,9 +174,9 @@ static IRAM_ATTR size_t tm1637_clk_encoder_callback(const void *data, size_t dat
 
 #define TM1637_DIO_ACK1_SYMBOL(res)     ((rmt_symbol_word_t) {  \
     .level0 = 0,                                                \
-    .duration0 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration0 = 1 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
     .level1 = 0,                                                \
-    .duration1 = 3 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
+    .duration1 = 2 * TM1637_QUARTER_PERIOD_IN_TICKS(res),       \
 })
 
 #define TM1637_DIO_ACK2_SYMBOL(res)     ((rmt_symbol_word_t) {  \
