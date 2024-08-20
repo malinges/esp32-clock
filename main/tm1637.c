@@ -13,14 +13,13 @@
 #include "tm1637.h"
 
 // TODO:
-// - startup sequence, if necessary (make sure DIO goes high before CLK
-//   to avoid triggering a signal stop condition by mistake, maybe by
-//   creating a dedicated encoder and symbols?)
-// - create a public API:
-//   - configurable resolution, frequency, gpios, etc.
-//   - deinit
-// - factorize CLK and DIO encoders? (might not be worthwhile)
-// - rework command building (defines are a bit crude)
+// - add to public API:
+//   - configurable intr_priority
+//   - high-level api
+// - document:
+//   - relation between resolution, symbols and frequency
+//   - symbol design decisions
+//   - rmt buffering issues
 // - make this an esp-idf component
 
 static const char *TAG = "tm1637";
