@@ -28,15 +28,15 @@
 #define TM1637_CLK_GPIO_NUM                 (0)
 #define TM1637_DIO_GPIO_NUM                 (1)
 
-#define TM1637_VALUES_PER_PERIOD            (4)
-#define TM1637_QUARTER_PERIOD_IN_TICKS(res) (1ULL * (res) / (TM1637_VALUES_PER_PERIOD * TM1637_FREQUENCY_HZ))
+#define TM1637_BITS_PER_PERIOD              (4)
+#define TM1637_QUARTER_PERIOD_IN_TICKS(res) (1ULL * (res) / (TM1637_BITS_PER_PERIOD * TM1637_FREQUENCY_HZ))
 #define TM1637_CHANNELS_NUM                 (2)
 
 #define RMT_MAX_TICKS                       ((1U << 15) - 1)
 #define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER  (3)
 #define CEIL(x, y)                          (((x) + (y) - 1) / (y))
-#define TM1637_MIN_FREQUENCY(res)           CEIL(CEIL((res), RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_VALUES_PER_PERIOD)
-#define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_VALUES_PER_PERIOD)
+#define TM1637_MIN_FREQUENCY(res)           CEIL(CEIL((res), RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_BITS_PER_PERIOD)
+#define TM1637_MAX_FREQUENCY(res)           ((res) / TM1637_BITS_PER_PERIOD)
 
 #define TM1637_RMT_SYMBOLS_PER_BYTE         (12)    // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 
