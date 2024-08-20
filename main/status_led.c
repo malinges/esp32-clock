@@ -28,11 +28,11 @@
 #define STATUS_LED_FREQUENCY_SLOW               (2UL)
 #define STATUS_LED_FREQUENCY_FAST               (8UL)
 
-#define STATUS_LED_DUTY_SYM                     (0x8UL << (STATUS_LED_DUTY_RES - 4))
+#define STATUS_LED_DUTY_SYM                     (0x08 << (STATUS_LED_DUTY_RES - 4))
 #if STATUS_LED_IDLE_LEVEL
-#define STATUS_LED_DUTY_ASYM                    (0xfUL << (STATUS_LED_DUTY_RES - 4))
+#define STATUS_LED_DUTY_ASYM                    (0x0e << (STATUS_LED_DUTY_RES - 4))
 #else
-#define STATUS_LED_DUTY_ASYM                    (0x1UL << (STATUS_LED_DUTY_RES - 4))
+#define STATUS_LED_DUTY_ASYM                    (0x01 << (STATUS_LED_DUTY_RES - 4))
 #endif
 
 #define STATUS_LED_CHECK(a, str, ret_val)       ESP_RETURN_ON_FALSE(a, ret_val, STATUS_LED_TAG, "%s", str)
