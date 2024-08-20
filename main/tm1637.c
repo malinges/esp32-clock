@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include <time.h>   // TODO remove
+#include <string.h> // TODO remove
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -15,6 +17,7 @@
 // TODO:
 // - add to public API:
 //   - configurable intr_priority
+//   - number of 7-segment digits
 //   - high-level api
 // - document:
 //   - relation between resolution, symbols and frequency
@@ -62,26 +65,26 @@ static const char *TAG = "tm1637";
 #define TM1637_CMD3_DISPLAY_OFF                 (0x00)
 #define TM1637_CMD3_DISPLAY_ON                  (0x08)
 
-// static const uint8_t tm1637_symbols[] = {
-//                 // XGFEDCBA
-//         0x3f, // 0b00111111,    // 0
-//         0x06, // 0b00000110,    // 1
-//         0x5b, // 0b01011011,    // 2
-//         0x4f, // 0b01001111,    // 3
-//         0x66, // 0b01100110,    // 4
-//         0x6d, // 0b01101101,    // 5
-//         0x7d, // 0b01111101,    // 6
-//         0x07, // 0b00000111,    // 7
-//         0x7f, // 0b01111111,    // 8
-//         0x6f, // 0b01101111,    // 9
-//         0x77, // 0b01110111,    // A
-//         0x7c, // 0b01111100,    // b
-//         0x39, // 0b00111001,    // C
-//         0x5e, // 0b01011110,    // d
-//         0x79, // 0b01111001,    // E
-//         0x71, // 0b01110001     // F
-//         0x40, // 0b01000000     // minus sign
-// };
+static const uint8_t tm1637_symbols[] = {
+                // XGFEDCBA
+        0x3f, // 0b00111111,    // 0
+        0x06, // 0b00000110,    // 1
+        0x5b, // 0b01011011,    // 2
+        0x4f, // 0b01001111,    // 3
+        0x66, // 0b01100110,    // 4
+        0x6d, // 0b01101101,    // 5
+        0x7d, // 0b01111101,    // 6
+        0x07, // 0b00000111,    // 7
+        0x7f, // 0b01111111,    // 8
+        0x6f, // 0b01101111,    // 9
+        0x77, // 0b01110111,    // A
+        0x7c, // 0b01111100,    // b
+        0x39, // 0b00111001,    // C
+        0x5e, // 0b01011110,    // d
+        0x79, // 0b01111001,    // E
+        0x71, // 0b01110001     // F
+        0x40, // 0b01000000     // minus sign
+};
 
 // CLK symbols
 
@@ -375,22 +378,46 @@ void rmt_test(void)
     // Set write mode, autoinc addr mode
     const uint8_t cmd1[] = { TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC };
     // Set start address to segment 0, enable all segments of all digits
-    const uint8_t cmd2_dots[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-    const uint8_t cmd2_nodots[] = { TM1637_CMD2_BASE | 0U, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f };
+    uint8_t cmd2[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff };
     // Set brightness to maximum, enable display
     const uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_0 | TM1637_CMD3_DISPLAY_ON };
 
-    bool show_dots = true;
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
     while (1) {
-        ESP_LOGW(TAG, "min frequency with res=%d: %d", TM1637_RMT_RESOLUTION_HZ, TM1637_MIN_FREQUENCY);
-        ESP_LOGW(TAG, "max frequency with res=%d: %d", TM1637_RMT_RESOLUTION_HZ, TM1637_MAX_FREQUENCY);
+        time_t t = time(NULL);
+        if (t == (time_t)-1) {
+            ESP_LOGE(TAG, "time() failed!");
+        } else {
+            struct tm tm;
+            if (localtime_r(&t, &tm) == NULL) {
+                ESP_LOGE(TAG, "localtime_r() failed!");
+            } else {
+                // ESP_LOGI(TAG, "%d-%d-%d %d:%d:%d", tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+                cmd2[1] = tm1637_symbols[tm.tm_hour / 10];
+                cmd2[2] = tm1637_symbols[tm.tm_hour % 10];
+                cmd2[3] = tm1637_symbols[tm.tm_min / 10];
+                cmd2[4] = tm1637_symbols[tm.tm_min % 10];
+                if (tm.tm_sec % 2 == 0) {
+                    cmd2[2] |= 0x80;
+                }
+                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd1, sizeof(cmd1)));
+                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd2, sizeof(cmd2)));
+                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd3, sizeof(cmd3)));
+            }
 
-        ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd1, sizeof(cmd1)));
-        ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, show_dots ? cmd2_dots : cmd2_nodots, show_dots ? sizeof(cmd2_dots) : sizeof(cmd2_nodots)));
-        ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd3, sizeof(cmd3)));
+            char buf[26];
+            if (ctime_r(&t, buf) == NULL) {
+                ESP_LOGE(TAG, "ctime_r() failed!");
+            } else {
+                char *newline = strchr(buf, '\n');
+                if (newline != NULL) {
+                    *newline = '\0';
+                }
+                ESP_LOGI(TAG, "%s", buf);
+            }
+        }
 
-        show_dots = !show_dots;
-        ESP_LOGI(TAG, "done! waiting for another round... :)");
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
     }
 }

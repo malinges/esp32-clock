@@ -59,12 +59,6 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 
 void app_main(void)
 {
-    rmt_test();
-
-    while (1) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -114,6 +108,8 @@ void app_main(void)
                         true,
                         portMAX_DELAY);
 
+    rmt_test();
+
     while (1) {
         time_t t = time(NULL);
         if (t == (time_t)-1) {
@@ -137,6 +133,6 @@ void app_main(void)
                 ESP_LOGI(TAG, "%s", buf);
             }
         }
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(pdTICKS_TO_MS(1000));
     }
 }
