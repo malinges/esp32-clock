@@ -17,6 +17,7 @@
 #include "sntp.h"
 #include "tz.h"
 #include "tm1637.h"
+#include "brightness.h"
 
 static const char *TAG = "app";
 
@@ -59,6 +60,23 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 
 void app_main(void)
 {
+    // Init display
+    tm1637_config_t tm1637_cfg = {
+        .clk_gpio_num = 1,
+        .dio_gpio_num = 2,
+        .frequency_hz = 100000,
+        .digits_num = 4,
+    };
+    tm1637_handle_t tm1637 = NULL;
+    ESP_ERROR_CHECK(tm1637_init(&tm1637_cfg, &tm1637));
+
+    // Enable all segments off all digits on max brightness
+    for (int i = 0; i < 4; i++) {
+        ESP_ERROR_CHECK(tm1637_set_digit_raw(tm1637, i, 0xff));
+    }
+    ESP_ERROR_CHECK(tm1637_set_brightness(tm1637, 7));
+    ESP_ERROR_CHECK(tm1637_update(tm1637));
+
     /* Initialize NVS partition */
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -108,19 +126,18 @@ void app_main(void)
                         true,
                         portMAX_DELAY);
 
-    tm1637_config_t tm1637_cfg = {
-        .clk_gpio_num = 0,
-        .dio_gpio_num = 2,
-        .frequency_hz = 100000,
-        .digits_num = 4,
-    };
-    tm1637_handle_t tm1637 = NULL;
-    ESP_ERROR_CHECK(tm1637_init(&tm1637_cfg, &tm1637));
-    ESP_ERROR_CHECK(tm1637_set_brightness(tm1637, 0));
+    adc_oneshot_unit_handle_t adc_unit = NULL;
+    ESP_ERROR_CHECK(brightness_init(&adc_unit));
+    int brightness;
+
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
+        brightness_read(adc_unit, &brightness);
+        ESP_LOGI(TAG, "brightness=%d", brightness);
+        tm1637_set_brightness(tm1637, brightness);
+
         time_t t = time(NULL);
         if (t == (time_t)-1) {
             ESP_LOGE(TAG, "time() failed!");
