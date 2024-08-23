@@ -28,7 +28,7 @@ static const char *TAG = "tm1637";
 
 #define TM1637_MEM_ALLOC_CAPS                   (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #define TM1637_RMT_CLK_SRC                      RMT_CLK_SRC_DEFAULT
-#define TM1637_RMT_RESOLUTION_HZ                (1 * 1000 * 1000) // 1MHz resolution, 1 tick = 1us
+#define TM1637_RMT_RESOLUTION_HZ                (80 * 1000 * 1000) // 80MHz resolution, 1 tick = 12.5ns
 #define TM1637_RMT_MEM_BLOCK_SYMBOLS            (48)
 #define TM1637_RMT_TRANS_QUEUE_DEPTH            (3)
 
