@@ -108,19 +108,33 @@ void app_main(void)
                         true,
                         portMAX_DELAY);
 
-    rmt_test();
+    tm1637_config_t tm1637_cfg = {
+        .clk_gpio_num = 0,
+        .dio_gpio_num = 2,
+        .frequency_hz = 100000,
+        .digits_num = 4,
+    };
+    tm1637_handle_t tm1637 = NULL;
+    ESP_ERROR_CHECK(tm1637_init(&tm1637_cfg, &tm1637));
+    ESP_ERROR_CHECK(tm1637_set_brightness(tm1637, 0));
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
         time_t t = time(NULL);
         if (t == (time_t)-1) {
             ESP_LOGE(TAG, "time() failed!");
         } else {
-            // struct tm tm;
-            // if (localtime_r(&t, &tm) == NULL) {
-            //     ESP_LOGE(TAG, "localtime_r() failed!");
-            // } else {
-            //     ESP_LOGI(TAG, "%d-%d-%d %d:%d:%d", tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-            // }
+            struct tm tm;
+            if (localtime_r(&t, &tm) == NULL) {
+                ESP_LOGE(TAG, "localtime_r() failed!");
+            } else {
+                tm1637_set_digit_number(tm1637, 0, tm.tm_hour / 10, false);
+                tm1637_set_digit_number(tm1637, 1, tm.tm_hour % 10, tm.tm_sec % 2 == 0);
+                tm1637_set_digit_number(tm1637, 2, tm.tm_min / 10, false);
+                tm1637_set_digit_number(tm1637, 3, tm.tm_min % 10, false);
+                tm1637_update(tm1637);
+            }
 
             char buf[26];
             if (ctime_r(&t, buf) == NULL) {
@@ -133,6 +147,7 @@ void app_main(void)
                 ESP_LOGI(TAG, "%s", buf);
             }
         }
-        vTaskDelay(pdTICKS_TO_MS(1000));
+
+        xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
     }
 }

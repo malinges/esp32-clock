@@ -1,6 +1,4 @@
 #include <stdint.h>
-#include <time.h>   // TODO remove
-#include <string.h> // TODO remove
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -17,8 +15,8 @@
 // TODO:
 // - add to public API:
 //   - configurable intr_priority
-//   - number of 7-segment digits
-//   - high-level api
+// - make updating display non-blocking (no rmt_tx_wait_all_done())
+// - double buffering?
 // - document:
 //   - relation between resolution, symbols and frequency
 //   - symbol design decisions
@@ -230,6 +228,7 @@ esp_err_t tm1637_init(tm1637_config_t *config, tm1637_handle_t *ret_tm1637)
     ESP_RETURN_ON_FALSE(config && ret_tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_FALSE(config->frequency_hz >= TM1637_MIN_FREQUENCY && config->frequency_hz <= TM1637_MAX_FREQUENCY,
                         ESP_ERR_INVALID_ARG, TAG, "frequency_hz must be between %d and %d", TM1637_MIN_FREQUENCY, TM1637_MAX_FREQUENCY);
+    ESP_RETURN_ON_FALSE(config->digits_num <= TM1637_MAX_DIGITS, ESP_ERR_INVALID_ARG, TAG, "digits_num must be between 0 and %d", TM1637_MAX_DIGITS);
 
     esp_err_t ret;
 
@@ -306,6 +305,13 @@ esp_err_t tm1637_init(tm1637_config_t *config, tm1637_handle_t *ret_tm1637)
     };
     ESP_GOTO_ON_ERROR(rmt_new_sync_manager(&sync_manager_cfg, &tm1637->sync_manager), err, TAG, "failed to create sync manager");
 
+    // digits_num and buffers
+
+    tm1637->digits_num = config->digits_num == 0 ? TM1637_MAX_DIGITS : config->digits_num; // default to max if 0
+    tm1637->cmd1_buf = TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC;
+    tm1637->cmd2_buf[0] = TM1637_CMD2_BASE;
+    tm1637->cmd3_buf = TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_7 | TM1637_CMD3_DISPLAY_ON;
+
     *ret_tm1637 = tm1637;
 
     return ESP_OK;
@@ -332,7 +338,43 @@ err:
     return ret;
 }
 
-esp_err_t tm1637_transmit_bytes(tm1637_handle_t tm1637, const uint8_t *bytes, size_t bytes_size)
+esp_err_t tm1637_set_digit_raw(tm1637_handle_t tm1637, uint8_t idx, uint8_t value)
+{
+    ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(idx < tm1637->digits_num, ESP_ERR_INVALID_ARG, TAG, "invalid argument: idx must be below %" PRIu8, tm1637->digits_num);
+    tm1637->cmd2_buf[1 + idx] = value;
+    return ESP_OK;
+}
+
+esp_err_t tm1637_set_digit_number(tm1637_handle_t tm1637, uint8_t idx, uint8_t value, bool set_dot)
+{
+    ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(idx < tm1637->digits_num, ESP_ERR_INVALID_ARG, TAG, "invalid argument: idx must be below %" PRIu8, tm1637->digits_num);
+    ESP_RETURN_ON_FALSE(value < 16, ESP_ERR_INVALID_ARG, TAG, "invalid argument: value must be below 16");
+    tm1637->cmd2_buf[1 + idx] = tm1637_symbols[value] | (set_dot ? 0x80 : 0);
+    return ESP_OK;
+}
+
+esp_err_t tm1637_set_brightness(tm1637_handle_t tm1637, uint8_t brightness)
+{
+    ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    ESP_RETURN_ON_FALSE(brightness < 8, ESP_ERR_INVALID_ARG, TAG, "invalid argument: brightness must be below 8");
+    tm1637->cmd3_buf = (tm1637->cmd3_buf & ~TM1637_CMD3_BRIGHTNESS_7) | brightness;
+    return ESP_OK;
+}
+
+esp_err_t tm1637_set_display_enabled(tm1637_handle_t tm1637, bool enabled)
+{
+    ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    if (enabled) {
+        tm1637->cmd3_buf |= TM1637_CMD3_DISPLAY_ON;
+    } else {
+        tm1637->cmd3_buf &= ~TM1637_CMD3_DISPLAY_ON;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t tm1637_transmit_bytes(tm1637_handle_t tm1637, const uint8_t *bytes, size_t bytes_size)
 {
     ESP_RETURN_ON_FALSE(tm1637 && bytes && bytes_size, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_ERROR(rmt_tx_wait_all_done(tm1637->clk_tx_channel, portMAX_DELAY), TAG, "failed to wait for clk channel");
@@ -343,81 +385,23 @@ esp_err_t tm1637_transmit_bytes(tm1637_handle_t tm1637, const uint8_t *bytes, si
     return ESP_OK;
 }
 
-esp_err_t tm1637_deinit(tm1637_handle_t tm1637)
+esp_err_t tm1637_update(tm1637_handle_t tm1637)
 {
     ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
-    if (tm1637->sync_manager) {
-        rmt_del_sync_manager(tm1637->sync_manager);
-    }
-    if (tm1637->dio_encoder) {
-        rmt_del_encoder(tm1637->dio_encoder);
-    }
-    if (tm1637->dio_tx_channel) {
-        rmt_del_channel(tm1637->dio_tx_channel);
-    }
-    if (tm1637->clk_encoder) {
-        rmt_del_encoder(tm1637->clk_encoder);
-    }
-    if (tm1637->clk_tx_channel) {
-        rmt_del_channel(tm1637->clk_tx_channel);
-    }
-    free(tm1637);
+    ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, &tm1637->cmd1_buf, sizeof(tm1637->cmd1_buf)), TAG, "failed to transmit cmd1");
+    ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, tm1637->cmd2_buf, sizeof(tm1637->cmd2_buf)), TAG, "failed to transmit cmd2");
+    ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, &tm1637->cmd3_buf, sizeof(tm1637->cmd3_buf)), TAG, "failed to transmit cmd3");
     return ESP_OK;
 }
 
-void rmt_test(void)
+esp_err_t tm1637_deinit(tm1637_handle_t tm1637)
 {
-    tm1637_config_t tm1637_cfg = {
-        .clk_gpio_num = 0,
-        .dio_gpio_num = 2,
-        .frequency_hz = TM1637_MAX_FREQUENCY,
-    };
-    tm1637_handle_t tm1637 = NULL;
-    ESP_ERROR_CHECK(tm1637_init(&tm1637_cfg, &tm1637));
-
-    // Set write mode, autoinc addr mode
-    const uint8_t cmd1[] = { TM1637_CMD1_BASE | TM1637_CMD1_OPERATION_WRITE | TM1637_CMD1_ADDR_AUTOINC };
-    // Set start address to segment 0, enable all segments of all digits
-    uint8_t cmd2[] = { TM1637_CMD2_BASE | 0U, 0xff, 0xff, 0xff, 0xff };
-    // Set brightness to maximum, enable display
-    const uint8_t cmd3[] = { TM1637_CMD3_BASE | TM1637_CMD3_BRIGHTNESS_0 | TM1637_CMD3_DISPLAY_ON };
-
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-
-    while (1) {
-        time_t t = time(NULL);
-        if (t == (time_t)-1) {
-            ESP_LOGE(TAG, "time() failed!");
-        } else {
-            struct tm tm;
-            if (localtime_r(&t, &tm) == NULL) {
-                ESP_LOGE(TAG, "localtime_r() failed!");
-            } else {
-                // ESP_LOGI(TAG, "%d-%d-%d %d:%d:%d", tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-                cmd2[1] = tm1637_symbols[tm.tm_hour / 10];
-                cmd2[2] = tm1637_symbols[tm.tm_hour % 10];
-                cmd2[3] = tm1637_symbols[tm.tm_min / 10];
-                cmd2[4] = tm1637_symbols[tm.tm_min % 10];
-                if (tm.tm_sec % 2 == 0) {
-                    cmd2[2] |= 0x80;
-                }
-                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd1, sizeof(cmd1)));
-                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd2, sizeof(cmd2)));
-                ESP_ERROR_CHECK(tm1637_transmit_bytes(tm1637, cmd3, sizeof(cmd3)));
-            }
-
-            char buf[26];
-            if (ctime_r(&t, buf) == NULL) {
-                ESP_LOGE(TAG, "ctime_r() failed!");
-            } else {
-                char *newline = strchr(buf, '\n');
-                if (newline != NULL) {
-                    *newline = '\0';
-                }
-                ESP_LOGI(TAG, "%s", buf);
-            }
-        }
-
-        xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
-    }
+    ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
+    rmt_del_sync_manager(tm1637->sync_manager);
+    rmt_del_encoder(tm1637->dio_encoder);
+    rmt_del_channel(tm1637->dio_tx_channel);
+    rmt_del_encoder(tm1637->clk_encoder);
+    rmt_del_channel(tm1637->clk_tx_channel);
+    free(tm1637);
+    return ESP_OK;
 }
