@@ -315,6 +315,9 @@ esp_err_t tm1637_init(tm1637_config_t *config, tm1637_handle_t *ret_tm1637)
 
     *ret_tm1637 = tm1637;
 
+    // ESP_LOGI(TAG, "frequency requested=%"PRIu32" actual=%"PRIu32, config->frequency_hz,
+    //     TM1637_RMT_RESOLUTION_HZ / TM1637_QUARTER_PERIOD_IN_TICKS(config->frequency_hz) / 4);
+
     return ESP_OK;
 
 err:
