@@ -17,6 +17,7 @@
 //   - configurable intr_priority
 // - make updating display non-blocking (no rmt_tx_wait_all_done())
 // - double buffering?
+// - find a way to transmit everything in a single rmt transaction
 // - move useful definitions to header file
 // - document:
 //   - relation between resolution, symbols and frequency
