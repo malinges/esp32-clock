@@ -393,7 +393,7 @@ esp_err_t tm1637_update(tm1637_handle_t tm1637)
 {
     ESP_RETURN_ON_FALSE(tm1637, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
     ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, &tm1637->cmd1_buf, sizeof(tm1637->cmd1_buf)), TAG, "failed to transmit cmd1");
-    ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, tm1637->cmd2_buf, sizeof(tm1637->cmd2_buf)), TAG, "failed to transmit cmd2");
+    ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, tm1637->cmd2_buf, 1 + tm1637->digits_num), TAG, "failed to transmit cmd2");
     ESP_RETURN_ON_ERROR(tm1637_transmit_bytes(tm1637, &tm1637->cmd3_buf, sizeof(tm1637->cmd3_buf)), TAG, "failed to transmit cmd3");
     return ESP_OK;
 }
