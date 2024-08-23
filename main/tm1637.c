@@ -33,13 +33,13 @@ static const char *TAG = "tm1637";
 #define TM1637_RMT_TRANS_QUEUE_DEPTH            (3)
 
 #define TM1637_BITS_PER_PERIOD                  (4)
-#define TM1637_QUARTER_PERIOD_IN_TICKS(freq)    (1ULL * TM1637_RMT_RESOLUTION_HZ / ((freq) * TM1637_BITS_PER_PERIOD))
 #define TM1637_RMT_SYMBOLS_PER_BYTE             (12) // (1 start + 8 * 1 bit + 1 ack1 + 1 ack2 + 1 stop)
 #define TM1637_MAX_SYMBOL_TICKS_MULTIPLIER      (3)
 #define TM1637_CHANNELS_NUM                     (2)
 
 #define RMT_MAX_TICKS                           ((1U << 15) - 1)
 #define CEIL(x, y)                              (((x) + (y) - 1) / (y))
+#define TM1637_QUARTER_PERIOD_IN_TICKS(freq)    CEIL(TM1637_RMT_RESOLUTION_HZ, (freq) * TM1637_BITS_PER_PERIOD)
 #define TM1637_MIN_FREQUENCY                    CEIL(CEIL(TM1637_RMT_RESOLUTION_HZ, RMT_MAX_TICKS / TM1637_MAX_SYMBOL_TICKS_MULTIPLIER), TM1637_BITS_PER_PERIOD)
 #define TM1637_MAX_FREQUENCY                    (TM1637_RMT_RESOLUTION_HZ / TM1637_BITS_PER_PERIOD)
 
