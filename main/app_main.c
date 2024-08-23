@@ -128,13 +128,13 @@ void app_main(void)
 
     adc_oneshot_unit_handle_t adc_unit = NULL;
     ESP_ERROR_CHECK(brightness_init(&adc_unit));
-    int brightness;
-
+    int brightness = 0;
+    int brightness_raw = 0;
 
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
-        brightness_read(adc_unit, &brightness);
+        brightness_read(adc_unit, &brightness, &brightness_raw);
         ESP_LOGI(TAG, "brightness=%d", brightness);
         tm1637_set_brightness(tm1637, brightness);
 

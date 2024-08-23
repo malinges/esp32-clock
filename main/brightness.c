@@ -42,10 +42,23 @@ err:
     return ret;
 }
 
-esp_err_t brightness_read(adc_oneshot_unit_handle_t adc_unit, int *ret_value)
+esp_err_t brightness_read(adc_oneshot_unit_handle_t adc_unit, int *ret_brightness, int *ret_brightness_raw)
 {
-    int raw_value;
-    ESP_RETURN_ON_ERROR(adc_oneshot_read(adc_unit, BRIGHTNESS_ADC_CHANNEL, &raw_value), TAG, "failed to read from ADC");
-    *ret_value = raw_value >> (BRIGHTNESS_ADC_BITWIDTH - BRIGHTNESS_VALUE_BITWIDTH);
+    const int divisor = 1 << (BRIGHTNESS_ADC_BITWIDTH - BRIGHTNESS_VALUE_BITWIDTH);
+    const int hysteresis_offset = divisor / 4;
+    int previous_brightness_raw = *ret_brightness_raw;
+
+    int brightness_raw;
+    ESP_RETURN_ON_ERROR(adc_oneshot_read(adc_unit, BRIGHTNESS_ADC_CHANNEL, &brightness_raw), TAG, "failed to read from ADC");
+
+    if (brightness_raw > previous_brightness_raw) {
+        brightness_raw -= hysteresis_offset;
+    } else if (brightness_raw < previous_brightness_raw) {
+        brightness_raw += hysteresis_offset;
+    }
+
+    *ret_brightness = brightness_raw / divisor;
+    *ret_brightness_raw = brightness_raw;
+
     return ESP_OK;
 }
