@@ -45,7 +45,7 @@ err:
 esp_err_t brightness_read(adc_oneshot_unit_handle_t adc_unit, int *ret_brightness, int *ret_brightness_raw)
 {
     const int divisor = 1 << (BRIGHTNESS_ADC_BITWIDTH - BRIGHTNESS_VALUE_BITWIDTH);
-    const int hysteresis_offset = divisor / 4;
+    const int hysteresis_offset = divisor / 3;
     int previous_brightness_raw = *ret_brightness_raw;
 
     int brightness_raw;
